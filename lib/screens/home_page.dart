@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'history_page.dart';
+import 'new_rendition_page.dart';
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -38,7 +41,13 @@ class HomePage extends StatelessWidget {
               ),
               const Spacer(),
               FilledButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NewRenditionPage(),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.camera_alt_outlined),
                 label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),
@@ -47,7 +56,13 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const HistoryPage(),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.history),
                 label: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),

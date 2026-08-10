@@ -5,18 +5,19 @@ import 'package:image/image.dart' as img;
 class SheetOrientationService {
   const SheetOrientationService._();
 
-  /// Las planillas de Los Dos Chinos se trabajan en formato apaisado.
-  /// Si la imagen recibida es claramente vertical, la gira 90 grados.
-  /// La corrección manual sigue disponible para casos ambiguos.
+  /// Normaliza primero la orientación EXIF y luego deja la planilla en
+  /// orientación apaisada. La corrección manual sigue disponible para
+  /// casos en los que la fotografía sea ambigua.
   static Uint8List autoRotateToLandscape(Uint8List bytes) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return bytes;
 
-    if (decoded.height > decoded.width) {
-      final rotated = img.copyRotate(decoded, angle: 90);
+    final normalized = img.bakeOrientation(decoded);
+    if (normalized.height > normalized.width) {
+      final rotated = img.copyRotate(normalized, angle: 90);
       return Uint8List.fromList(img.encodeJpg(rotated, quality: 95));
     }
 
-    return bytes;
+    return Uint8List.fromList(img.encodeJpg(normalized, quality: 95));
   }
 }

@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../services/sheet_orientation_service.dart';
 
 class NewRenditionPage extends StatefulWidget {
   const NewRenditionPage({super.key});
@@ -12,6 +16,7 @@ class NewRenditionPage extends StatefulWidget {
 class _NewRenditionPageState extends State<NewRenditionPage> {
   final ImagePicker _picker = ImagePicker();
   XFile? _image;
+  Uint8List? _imageBytes;
   bool _capturing = false;
   int _rotationQuarterTurns = 0;
 
@@ -24,8 +29,14 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
       );
       if (!mounted) return;
       if (image != null) {
+        final originalBytes = await image.readAsBytes();
+        final orientedBytes = SheetOrientationService.autoRotateToLandscape(
+          originalBytes,
+        );
+
         setState(() {
           _image = image;
+          _imageBytes = orientedBytes;
           _rotationQuarterTurns = 0;
         });
       }
@@ -46,9 +57,8 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
   }
 
   Future<void> _showPreview() async {
-    final image = _image;
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
+    final bytes = _imageBytes;
+    if (bytes == null) return;
     if (!mounted) return;
 
     await showDialog<void>(
@@ -79,7 +89,9 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
             children: [
               const SizedBox(height: 24),
               Icon(
-                _image == null ? Icons.camera_alt_outlined : Icons.check_circle_outline,
+                _image == null
+                    ? Icons.camera_alt_outlined
+                    : Icons.check_circle_outline,
                 size: 80,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -87,7 +99,10 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               Text(
                 _image == null ? 'Fotografiar planilla' : 'Planilla capturada',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(
@@ -114,7 +129,11 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               FilledButton.icon(
                 onPressed: _capturing ? null : _captureSheet,
                 icon: _capturing
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.camera_alt_outlined),
                 label: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),

@@ -30,13 +30,13 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
       if (!mounted) return;
       if (image != null) {
         final originalBytes = await image.readAsBytes();
-        final orientedBytes = SheetOrientationService.autoRotateToLandscape(
+        final processedBytes = SheetOrientationService.autoDetectAndRectifySheet(
           originalBytes,
         );
 
         setState(() {
           _image = image;
-          _imageBytes = orientedBytes;
+          _imageBytes = processedBytes;
           _rotationQuarterTurns = 0;
         });
       }

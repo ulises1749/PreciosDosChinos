@@ -13,20 +13,21 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
   final ImagePicker _picker = ImagePicker();
   XFile? _image;
   bool _capturing = false;
+  int _rotationQuarterTurns = 0;
 
   Future<void> _captureSheet() async {
     setState(() => _capturing = true);
-
     try {
       final image = await _picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 90,
       );
-
       if (!mounted) return;
-
       if (image != null) {
-        setState(() => _image = image);
+        setState(() {
+          _image = image;
+          _rotationQuarterTurns = 0;
+        });
       }
     } catch (error) {
       if (!mounted) return;
@@ -40,16 +41,13 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _capturing = false);
-      }
+      if (mounted) setState(() => _capturing = false);
     }
   }
 
   Future<void> _showPreview() async {
     final image = _image;
     if (image == null) return;
-
     final bytes = await image.readAsBytes();
     if (!mounted) return;
 
@@ -65,16 +63,56 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               tooltip: 'Cerrar',
             ),
           ),
-          body: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 5,
-            child: Center(
-              child: Image.memory(
-                bytes,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
+          body: Column(
+            children: [
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 5,
+                  child: Center(
+                    child: RotatedBox(
+                      quarterTurns: _rotationQuarterTurns,
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => setState(() {
+                            _rotationQuarterTurns =
+                                (_rotationQuarterTurns + 3) % 4;
+                          }),
+                          icon: const Icon(Icons.rotate_left),
+                          label: const Text('Girar izquierda'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => setState(() {
+                            _rotationQuarterTurns =
+                                (_rotationQuarterTurns + 1) % 4;
+                          }),
+                          icon: const Icon(Icons.rotate_right),
+                          label: const Text('Girar derecha'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -88,9 +126,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
         : (_image == null ? 'Fotografiar planilla' : 'Volver a fotografiar');
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nueva rendición'),
-      ),
+      appBar: AppBar(title: const Text('Nueva rendición')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -109,9 +145,10 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               Text(
                 _image == null ? 'Fotografiar planilla' : 'Planilla capturada',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(

@@ -53,68 +53,12 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog.fullscreen(
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Planilla capturada'),
-            leading: IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(context).pop(),
-              tooltip: 'Cerrar',
-            ),
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 5,
-                  child: Center(
-                    child: RotatedBox(
-                      quarterTurns: _rotationQuarterTurns,
-                      child: Image.memory(
-                        bytes,
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => setState(() {
-                            _rotationQuarterTurns =
-                                (_rotationQuarterTurns + 3) % 4;
-                          }),
-                          icon: const Icon(Icons.rotate_left),
-                          label: const Text('Girar izquierda'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () => setState(() {
-                            _rotationQuarterTurns =
-                                (_rotationQuarterTurns + 1) % 4;
-                          }),
-                          icon: const Icon(Icons.rotate_right),
-                          label: const Text('Girar derecha'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (dialogContext) => _SheetPreviewDialog(
+        bytes: bytes,
+        initialQuarterTurns: _rotationQuarterTurns,
+        onRotationChanged: (turns) {
+          if (mounted) setState(() => _rotationQuarterTurns = turns);
+        },
       ),
     );
   }
@@ -135,9 +79,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
             children: [
               const SizedBox(height: 24),
               Icon(
-                _image == null
-                    ? Icons.camera_alt_outlined
-                    : Icons.check_circle_outline,
+                _image == null ? Icons.camera_alt_outlined : Icons.check_circle_outline,
                 size: 80,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -145,10 +87,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               Text(
                 _image == null ? 'Fotografiar planilla' : 'Planilla capturada',
                 textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(
@@ -175,11 +114,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               FilledButton.icon(
                 onPressed: _capturing ? null : _captureSheet,
                 icon: _capturing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.camera_alt_outlined),
                 label: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -196,6 +131,98 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetPreviewDialog extends StatefulWidget {
+  const _SheetPreviewDialog({
+    required this.bytes,
+    required this.initialQuarterTurns,
+    required this.onRotationChanged,
+  });
+
+  final Uint8List bytes;
+  final int initialQuarterTurns;
+  final ValueChanged<int> onRotationChanged;
+
+  @override
+  State<_SheetPreviewDialog> createState() => _SheetPreviewDialogState();
+}
+
+class _SheetPreviewDialogState extends State<_SheetPreviewDialog> {
+  late int _quarterTurns;
+
+  @override
+  void initState() {
+    super.initState();
+    _quarterTurns = widget.initialQuarterTurns;
+  }
+
+  void _rotate(int delta) {
+    setState(() => _quarterTurns = (_quarterTurns + delta) % 4);
+    widget.onRotationChanged(_quarterTurns);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Planilla capturada'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Cerrar',
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 6,
+                boundaryMargin: const EdgeInsets.all(80),
+                child: Center(
+                  child: RotatedBox(
+                    quarterTurns: _quarterTurns,
+                    child: Image.memory(
+                      widget.bytes,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _rotate(-1),
+                        icon: const Icon(Icons.rotate_left),
+                        label: const Text('Girar izquierda'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _rotate(1),
+                        icon: const Icon(Icons.rotate_right),
+                        label: const Text('Girar derecha'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

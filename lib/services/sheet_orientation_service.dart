@@ -132,13 +132,13 @@ class SheetOrientationService {
   }
 
   static double _luminance(img.Pixel pixel) {
-    return 0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
+    return (0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b).toDouble();
   }
 
   static double _saturation(img.Pixel pixel) {
     final maxChannel = math.max(pixel.r, math.max(pixel.g, pixel.b));
     final minChannel = math.min(pixel.r, math.min(pixel.g, pixel.b));
-    return maxChannel - minChannel;
+    return (maxChannel - minChannel).toDouble();
   }
 
   static List<img.Point> _convexHull(List<img.Point> points) {
@@ -178,7 +178,7 @@ class SheetOrientationService {
   }
 
   static double _cross(img.Point a, img.Point b, img.Point c) {
-    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).toDouble();
   }
 
   static img.Point _extremePoint(

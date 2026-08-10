@@ -18,9 +18,8 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
     setState(() => _capturing = true);
 
     try {
-      final source = kIsWeb ? ImageSource.camera : ImageSource.camera;
       final image = await _picker.pickImage(
-        source: source,
+        source: ImageSource.camera,
         imageQuality: 90,
       );
 
@@ -33,7 +32,11 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No se pudo abrir la cámara: $error'),
+          content: Text(
+            kIsWeb
+                ? 'En la versión web de PC, el navegador puede abrir el selector de archivos en lugar de la cámara.'
+                : 'No se pudo abrir la cámara: $error',
+          ),
         ),
       );
     } finally {
@@ -52,29 +55,27 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Planilla capturada',
-                style: Theme.of(context).textTheme.titleLarge,
+      builder: (context) => Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Planilla capturada'),
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Cerrar',
+            ),
+          ),
+          body: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 5,
+            child: Center(
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
               ),
             ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 500),
-              child: Image.memory(bytes, fit: BoxFit.contain),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Continuar'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -82,6 +83,10 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final captureLabel = kIsWeb
+        ? (_image == null ? 'Seleccionar fotografía' : 'Volver a seleccionar')
+        : (_image == null ? 'Fotografiar planilla' : 'Volver a fotografiar');
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nueva rendición'),
@@ -111,7 +116,9 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               const SizedBox(height: 12),
               Text(
                 _image == null
-                    ? 'Capturá la planilla para que la aplicación pueda detectar automáticamente la hoja y leer sus cantidades.'
+                    ? (kIsWeb
+                        ? 'En la versión de PC podés seleccionar una fotografía de la planilla. En el teléfono usaremos la cámara.'
+                        : 'Capturá la planilla para que la aplicación pueda detectar automáticamente la hoja y leer sus cantidades.')
                     : 'La fotografía quedó lista para el siguiente paso de procesamiento.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyLarge,
@@ -123,7 +130,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
                   icon: const Icon(Icons.image_outlined),
                   label: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Ver fotografía'),
+                    child: Text('Ver fotografía y ampliar'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -139,7 +146,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
                     : const Icon(Icons.camera_alt_outlined),
                 label: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text(_image == null ? 'Capturar planilla' : 'Volver a fotografiar'),
+                  child: Text(captureLabel),
                 ),
               ),
               const SizedBox(height: 12),

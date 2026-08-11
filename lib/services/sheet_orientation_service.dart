@@ -15,15 +15,21 @@ class SheetOrientationService {
 
     final normalized = img.bakeOrientation(decoded);
     final landscape = normalized.height > normalized.width
-        ? img.copyRotate(normalized, angle: 90, interpolation: img.Interpolation.linear)
+        ? img.copyRotate(
+            normalized,
+            angle: 90,
+            interpolation: img.Interpolation.linear,
+          )
         : normalized;
 
     return Uint8List.fromList(img.encodeJpg(landscape, quality: 95));
   }
 
   /// Intenta localizar la hoja dentro de la fotografía y corregir su
-  /// perspectiva. Si la detección no es suficientemente confiable, devuelve
-  /// la imagen original para no deformarla accidentalmente.
+  /// perspectiva. La detección se hace sobre una copia reducida y usa una
+  /// máscara de zonas claras, un cierre morfológico y el mayor componente
+  /// conectado. Si la detección no es confiable, se conserva la fotografía
+  /// apaisada en lugar de aplicar una deformación incorrecta.
   static Uint8List autoDetectAndRectifySheet(Uint8List bytes) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return bytes;
@@ -37,10 +43,12 @@ class SheetOrientationService {
       );
     }
 
-    // El detector trabaja sobre una copia pequeña para que sea rápido incluso
-    // con fotografías de cámara de varios megapíxeles.
     final detectionImage = source.width > 800
-        ? img.copyResize(source, width: 800, interpolation: img.Interpolation.linear)
+        ? img.copyResize(
+            source,
+            width: 800,
+            interpolation: img.Interpolation.linear,
+          )
         : source;
 
     final corners = _detectSheetCorners(detectionImage);
@@ -51,13 +59,23 @@ class SheetOrientationService {
     final scaleX = source.width / detectionImage.width;
     final scaleY = source.height / detectionImage.height;
 
-    final topLeft = img.Point(corners.topLeft.x * scaleX, corners.topLeft.y * scaleY);
-    final topRight = img.Point(corners.topRight.x * scaleX, corners.topRight.y * scaleY);
-    final bottomLeft = img.Point(corners.bottomLeft.x * scaleX, corners.bottomLeft.y * scaleY);
-    final bottomRight = img.Point(corners.bottomRight.x * scaleX, corners.bottomRight.y * scaleY);
+    final topLeft = img.Point(
+      corners.topLeft.x * scaleX,
+      corners.topLeft.y * scaleY,
+    );
+    final topRight = img.Point(
+      corners.topRight.x * scaleX,
+      corners.topRight.y * scaleY,
+    );
+    final bottomLeft = img.Point(
+      corners.bottomLeft.x * scaleX,
+      corners.bottomLeft.y * scaleY,
+    );
+    final bottomRight = img.Point(
+      corners.bottomRight.x * scaleX,
+      corners.bottomRight.y * scaleY,
+    );
 
-    // copyRectify transforma el cuadrilátero detectado en toda la imagen,
-    // dejando una planilla frontal lista para el OCR posterior.
     final rectified = img.copyRectify(
       source,
       topLeft: topLeft,
@@ -71,14 +89,12 @@ class SheetOrientationService {
   }
 
   static _SheetCorners? _detectSheetCorners(img.Image image) {
-    final pixels = <img.Point>[];
     final width = image.width;
     final height = image.height;
-
     if (width < 80 || height < 80) return null;
 
-    // La planilla suele ser clara y poco saturada respecto del fondo.
-    // Calculamos el promedio del borde para adaptar el umbral a la foto.
+    // La planilla suele ser clara respecto del fondo. El umbral se adapta a
+    // la iluminación de cada fotografía usando el borde como referencia.
     var borderSum = 0.0;
     var borderCount = 0;
     final borderStepX = math.max(1, width ~/ 80);
@@ -96,23 +112,56 @@ class SheetOrientationService {
     }
 
     final borderMean = borderSum / borderCount;
-    final threshold = math.max(135.0, math.min(210.0, borderMean + 45.0));
+    final threshold = math.max(125.0, math.min(215.0, borderMean + 38.0));
 
-    final step = math.max(1, math.max(width, height) ~/ 500);
-    for (var y = 0; y < height; y += step) {
-      for (var x = 0; x < width; x += step) {
+    final step = math.max(1, math.max(width, height) ~/ 600);
+    final maskWidth = (width + step - 1) ~/ step;
+    final maskHeight = (height + step - 1) ~/ step;
+    final mask = Uint8List(maskWidth * maskHeight);
+
+    for (var my = 0; my < maskHeight; my++) {
+      final y = math.min(height - 1, my * step);
+      for (var mx = 0; mx < maskWidth; mx++) {
+        final x = math.min(width - 1, mx * step);
         final pixel = image.getPixel(x, y);
         final luminance = _luminance(pixel);
         final saturation = _saturation(pixel);
-        if (luminance >= threshold && saturation <= 65) {
-          pixels.add(img.Point(x, y));
+        if (luminance >= threshold && saturation <= 100) {
+          mask[my * maskWidth + mx] = 1;
         }
       }
     }
 
-    if (pixels.length < 100) return null;
+    // Une las zonas blancas separadas por las líneas de la planilla.
+    _morphologicalClose(mask, maskWidth, maskHeight, radius: 2);
 
-    final hull = _convexHull(pixels);
+    final component = _largestComponent(mask, maskWidth, maskHeight);
+    if (component == null) return null;
+
+    final componentRatio = component.count / mask.length;
+    if (componentRatio < 0.10 || componentRatio > 0.90) return null;
+
+    // Tomamos una muestra del contorno para evitar ordenar cientos de miles
+    // de píxeles al construir la envolvente convexa.
+    final contour = <img.Point>[];
+    final sampleEvery = math.max(1, component.count ~/ 6000);
+    var sampleIndex = 0;
+    for (var y = 0; y < maskHeight; y++) {
+      for (var x = 0; x < maskWidth; x++) {
+        final index = y * maskWidth + x;
+        if (component.labels[index] != component.label) continue;
+        if (!_isBoundary(component.labels, component.label, x, y, maskWidth, maskHeight)) {
+          continue;
+        }
+        if (sampleIndex++ % sampleEvery == 0) {
+          contour.add(img.Point(x * step, y * step));
+        }
+      }
+    }
+
+    if (contour.length < 20) return null;
+
+    final hull = _convexHull(contour);
     if (hull.length < 4) return null;
 
     final topLeft = _extremePoint(hull, (p) => p.x + p.y, findMin: true);
@@ -129,6 +178,136 @@ class SheetOrientationService {
 
     if (!_isPlausible(corners, width, height)) return null;
     return corners;
+  }
+
+  static void _morphologicalClose(
+    Uint8List mask,
+    int width,
+    int height, {
+    required int radius,
+  }) {
+    final dilated = Uint8List(mask.length);
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        var found = false;
+        for (var dy = -radius; dy <= radius && !found; dy++) {
+          final yy = y + dy;
+          if (yy < 0 || yy >= height) continue;
+          for (var dx = -radius; dx <= radius; dx++) {
+            final xx = x + dx;
+            if (xx < 0 || xx >= width) continue;
+            if (mask[yy * width + xx] != 0) {
+              found = true;
+              break;
+            }
+          }
+        }
+        if (found) dilated[y * width + x] = 1;
+      }
+    }
+
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        var filled = true;
+        for (var dy = -radius; dy <= radius && filled; dy++) {
+          final yy = y + dy;
+          if (yy < 0 || yy >= height) {
+            filled = false;
+            break;
+          }
+          for (var dx = -radius; dx <= radius; dx++) {
+            final xx = x + dx;
+            if (xx < 0 || xx >= width || dilated[yy * width + xx] == 0) {
+              filled = false;
+              break;
+            }
+          }
+        }
+        mask[y * width + x] = filled ? 1 : 0;
+      }
+    }
+  }
+
+  static _Component? _largestComponent(
+    Uint8List mask,
+    int width,
+    int height,
+  ) {
+    final labels = Int32List(mask.length);
+    var nextLabel = 0;
+    _Component? largest;
+    final queue = Int32List(mask.length);
+
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        final start = y * width + x;
+        if (mask[start] == 0 || labels[start] != 0) continue;
+
+        nextLabel++;
+        var head = 0;
+        var tail = 0;
+        queue[tail++] = start;
+        labels[start] = nextLabel;
+        var count = 0;
+
+        while (head < tail) {
+          final current = queue[head++];
+          count++;
+          final cx = current % width;
+          final cy = current ~/ width;
+
+          if (cx > 0) {
+            final n = current - 1;
+            if (mask[n] != 0 && labels[n] == 0) {
+              labels[n] = nextLabel;
+              queue[tail++] = n;
+            }
+          }
+          if (cx + 1 < width) {
+            final n = current + 1;
+            if (mask[n] != 0 && labels[n] == 0) {
+              labels[n] = nextLabel;
+              queue[tail++] = n;
+            }
+          }
+          if (cy > 0) {
+            final n = current - width;
+            if (mask[n] != 0 && labels[n] == 0) {
+              labels[n] = nextLabel;
+              queue[tail++] = n;
+            }
+          }
+          if (cy + 1 < height) {
+            final n = current + width;
+            if (mask[n] != 0 && labels[n] == 0) {
+              labels[n] = nextLabel;
+              queue[tail++] = n;
+            }
+          }
+        }
+
+        if (largest == null || count > largest.count) {
+          largest = _Component(label: nextLabel, count: count, labels: labels);
+        }
+      }
+    }
+
+    return largest;
+  }
+
+  static bool _isBoundary(
+    Int32List labels,
+    int label,
+    int x,
+    int y,
+    int width,
+    int height,
+  ) {
+    if (x == 0 || y == 0 || x == width - 1 || y == height - 1) return true;
+    return labels[y * width + x - 1] != label ||
+        labels[y * width + x + 1] != label ||
+        labels[(y - 1) * width + x] != label ||
+        labels[(y + 1) * width + x] != label;
   }
 
   static double _luminance(img.Pixel pixel) {
@@ -158,7 +337,8 @@ class SheetOrientationService {
 
     final lower = <img.Point>[];
     for (final point in unique) {
-      while (lower.length >= 2 && _cross(lower[lower.length - 2], lower.last, point) <= 0) {
+      while (lower.length >= 2 &&
+          _cross(lower[lower.length - 2], lower.last, point) <= 0) {
         lower.removeLast();
       }
       lower.add(point);
@@ -166,7 +346,8 @@ class SheetOrientationService {
 
     final upper = <img.Point>[];
     for (final point in unique.reversed) {
-      while (upper.length >= 2 && _cross(upper[upper.length - 2], upper.last, point) <= 0) {
+      while (upper.length >= 2 &&
+          _cross(upper[upper.length - 2], upper.last, point) <= 0) {
         upper.removeLast();
       }
       upper.add(point);
@@ -178,7 +359,9 @@ class SheetOrientationService {
   }
 
   static double _cross(img.Point a, img.Point b, img.Point c) {
-    return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).toDouble();
+    return ((b.x - a.x) * (c.y - a.y) -
+            (b.y - a.y) * (c.x - a.x))
+        .toDouble();
   }
 
   static img.Point _extremePoint(
@@ -191,7 +374,8 @@ class SheetOrientationService {
     for (final point in points.skip(1)) {
       final value = score(point);
       final bestValue = score(best);
-      if ((findMin && value < bestValue) || (findMax && value > bestValue)) {
+      if ((findMin && value < bestValue) ||
+          (findMax && value > bestValue)) {
         best = point;
       }
     }
@@ -217,7 +401,6 @@ class SheetOrientationService {
     final imageArea = width * height.toDouble();
     final areaRatio = area / imageArea;
 
-    // Evita interpretar una pared clara o el fondo completo como la hoja.
     if (areaRatio < 0.15 || areaRatio > 0.92) return false;
 
     final minCornerDistance = diagonal * 0.08;
@@ -240,7 +423,7 @@ class SheetOrientationService {
     final averageWidth = (topWidth + bottomWidth) / 2;
     final averageHeight = (leftHeight + rightHeight) / 2;
 
-    // El flujo de rendición trabaja con planillas apaisadas.
+    // Las planillas de este proyecto son apaisadas.
     if (averageWidth / averageHeight < 1.05) return false;
 
     return true;
@@ -260,6 +443,18 @@ class SheetOrientationService {
     final dy = a.y - b.y;
     return math.sqrt(dx * dx + dy * dy);
   }
+}
+
+class _Component {
+  const _Component({
+    required this.label,
+    required this.count,
+    required this.labels,
+  });
+
+  final int label;
+  final int count;
+  final Int32List labels;
 }
 
 class _SheetCorners {

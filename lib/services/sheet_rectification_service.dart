@@ -63,7 +63,6 @@ class SheetRectificationService {
       }
     }
 
-    // Close the internal grid lines. The radius scales with the image size.
     final radius = math.max(4, math.min(12, math.min(w, h) ~/ 140));
     _close(mask, w, h, radius);
 
@@ -86,8 +85,6 @@ class SheetRectificationService {
 
     if (rows.length < h * 0.18) return null;
 
-    // The sheet is the large, coherent light region. Ignore thin bands near
-    // the image edges, which are usually the table/background.
     final usableRows = rows
         .where((r) => r.y > h * 0.04 && r.y < h * 0.96)
         .toList();
@@ -109,8 +106,15 @@ class SheetRectificationService {
     final bl = img.Point(_lineAt(leftLine, bottom), bottom);
     final br = img.Point(_lineAt(rightLine, bottom), bottom);
 
-    // Refine top/bottom edges using column spans inside the detected body.
-    final topBottom = _columnBounds(mask, w, h, tl.x, tr.x, top, bottom);
+    final topBottom = _columnBounds(
+      mask,
+      w,
+      h,
+      tl.x.toDouble(),
+      tr.x.toDouble(),
+      top,
+      bottom,
+    );
     final topY = topBottom.$1;
     final bottomY = topBottom.$2;
 
@@ -243,11 +247,7 @@ class SheetRectificationService {
     return _Pair(slope, intercept);
   }
 
-  static double _lineAt(_Pair line, double y) {
-    // line stores x as its independent coordinate and y as dependent.
-    // The caller fits x as a function of image y.
-    return line.x * y + line.y;
-  }
+  static double _lineAt(_Pair line, double y) => line.x * y + line.y;
 
   static double _median(Iterable<double> values) {
     final sorted = values.toList()..sort();

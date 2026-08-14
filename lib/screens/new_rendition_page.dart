@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../services/sheet_orientation_service.dart';
+import '../services/sheet_rectification_service.dart';
 
 class NewRenditionPage extends StatefulWidget {
   const NewRenditionPage({super.key});
@@ -30,9 +30,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
       if (!mounted) return;
       if (image != null) {
         final originalBytes = await image.readAsBytes();
-        final processedBytes = SheetOrientationService.autoDetectAndRectifySheet(
-          originalBytes,
-        );
+        final processedBytes = SheetRectificationService.process(originalBytes);
 
         setState(() {
           _image = image;
@@ -89,9 +87,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
             children: [
               const SizedBox(height: 24),
               Icon(
-                _image == null
-                    ? Icons.camera_alt_outlined
-                    : Icons.check_circle_outline,
+                _image == null ? Icons.camera_alt_outlined : Icons.check_circle_outline,
                 size: 80,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -99,10 +95,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               Text(
                 _image == null ? 'Fotografiar planilla' : 'Planilla capturada',
                 textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(
@@ -129,11 +122,7 @@ class _NewRenditionPageState extends State<NewRenditionPage> {
               FilledButton.icon(
                 onPressed: _capturing ? null : _captureSheet,
                 icon: _capturing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.camera_alt_outlined),
                 label: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),

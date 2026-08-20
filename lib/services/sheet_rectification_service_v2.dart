@@ -105,8 +105,12 @@ class SheetRectificationServiceV2 {
       return null;
     }
 
-    final quad = <img.Point>[topLeft, topRight, bottomRight, bottomLeft];
-    return _validQuad(quad, w, h) ? quad : null;
+    final quad = <_Pair>[topLeft, topRight, bottomRight, bottomLeft];
+    if (!_validQuad(quad, w, h)) return null;
+
+    return quad
+        .map((p) => img.Point(p.x, p.y))
+        .toList();
   }
 
   static _Line? _findHorizontalBorder(
